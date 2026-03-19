@@ -356,10 +356,10 @@
 <div class="toast" id="toast"></div>
 
 <script>
-// 수정사항: Supabase 프로젝트 정보 설정
+// 수정사항: Supabase 프로젝트 정보 설정 (변수 이름을 _supabase로 변경하여 충돌 방지)
 const SUPABASE_URL = 'https://rrfjdicbtihxqjiaeuus.supabase.co'; 
 const SUPABASE_KEY = 'sb_publishable_dieKyaJ9x78Tbgm41gpmoQ_GZlcVMZ-';
-const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let entries = [];
 let userData = { name: "", email: "", joinDate: "", photo: "" };
@@ -380,9 +380,9 @@ let photoBase64 = "";
 let currentView = 'list';
 let isFilteredView = false;
 
-// 수정사항: 실제 구글 로그인 연동
+// 수정사항: 실제 구글 로그인 연동 (_supabase 사용)
 async function handleGoogleLogin() {
-  const { data, error } = await supabase.auth.signInWithOAuth({
+  const { data, error } = await _supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
       redirectTo: window.location.origin + window.location.pathname
@@ -391,9 +391,9 @@ async function handleGoogleLogin() {
   if (error) showToast("로그인 실패: " + error.message);
 }
 
-// 수정사항: 로그인 성공 후 정보 불러오기 및 앱 실행
+// 수정사항: 로그인 성공 후 정보 불러오기 및 앱 실행 (_supabase 사용)
 async function checkUser() {
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user } } = await _supabase.auth.getUser();
   if (user) {
     userData = {
       name: user.user_metadata.full_name || "사용자",
@@ -423,7 +423,7 @@ async function checkUser() {
 }
 
 async function handleLogout() {
-  await supabase.auth.signOut();
+  await _supabase.auth.signOut();
   location.reload();
 }
 
