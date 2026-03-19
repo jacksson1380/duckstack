@@ -380,15 +380,25 @@ let photoBase64 = "";
 let currentView = 'list';
 let isFilteredView = false;
 
-// 수정사항: 실제 구글 로그인 연동 (_supabase 사용)
+// 수정사항: 보강된 구글 로그인 연동 (찌꺼기 세션 정리 및 계정 선택 강제)
 async function handleGoogleLogin() {
+  // 이전 세션 및 로컬 저장소 데이터 정리
+  await _supabase.auth.signOut();
+  localStorage.clear();
+
   const { data, error } = await _supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: window.location.origin + window.location.pathname
+      redirectTo: window.location.origin + window.location.pathname,
+      queryParams: {
+        prompt: 'select_account' // 항상 계정 선택 창이 뜨도록 설정
+      }
     }
   });
-  if (error) showToast("로그인 실패: " + error.message);
+  if (error) {
+    showToast("로그인 실패: " + error.message);
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
 }
 
 // 수정사항: 로그인 성공 후 정보 불러오기 및 앱 실행 (_supabase 사용)
