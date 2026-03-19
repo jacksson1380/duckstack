@@ -329,11 +329,11 @@
     <textarea class="form-textarea" id="input-content" placeholder="자세히 적어주세요..."></textarea>
     <label class="form-label">포인트</label>
     <div class="pts-selector">
-      <button class="pts-btn selected" data-pts="10" onclick="selectPts(this)">+10</button>
-      <button class="pts-btn" data-pts="30" onclick="selectPts(this)">+30</button>
-      <button class="pts-btn" data-pts="50" onclick="selectPts(this)">+50</button>
-      <button class="pts-btn" data-pts="100" onclick="selectPts(this)">+100</button>
-      <button class="pts-btn" data-pts="200" onclick="selectPts(this)">+200</button>
+      <button class="pts-btn selected" data-pts="1" onclick="selectPts(this)">+1</button>
+      <button class="pts-btn" data-pts="2" onclick="selectPts(this)">+2</button>
+      <button class="pts-btn" data-pts="3" onclick="selectPts(this)">+3</button>
+      <button class="pts-btn" data-pts="4" onclick="selectPts(this)">+4</button>
+      <button class="pts-btn" data-pts="5" onclick="selectPts(this)">+5</button>
     </div>
     <label class="form-label">태그</label>
     <div class="tag-selector">
@@ -374,7 +374,7 @@ const RANKS = [
 ];
 
 let curDate = new Date();
-let selectedPts = 10;
+let selectedPts = 1;
 let selectedTags = [];
 let photoBase64 = "";
 let currentView = 'list';
@@ -382,7 +382,6 @@ let isFilteredView = false;
 
 // 수정사항: 보강된 구글 로그인 연동 (찌꺼기 세션 정리 및 계정 선택 강제)
 async function handleGoogleLogin() {
-  // 이전 세션 및 로컬 저장소 데이터 정리
   await _supabase.auth.signOut();
   localStorage.clear();
 
@@ -391,7 +390,7 @@ async function handleGoogleLogin() {
     options: {
       redirectTo: window.location.origin + window.location.pathname,
       queryParams: {
-        prompt: 'select_account' // 항상 계정 선택 창이 뜨도록 설정
+        prompt: 'select_account'
       }
     }
   });
@@ -401,7 +400,6 @@ async function handleGoogleLogin() {
   }
 }
 
-// 수정사항: 로그인 성공 후 정보 불러오기 및 앱 실행 (_supabase 사용)
 async function checkUser() {
   const { data: { user } } = await _supabase.auth.getUser();
   if (user) {
@@ -437,7 +435,6 @@ async function handleLogout() {
   location.reload();
 }
 
-// 기존 모든 로직 유지
 function triggerProfileUpload() { document.getElementById('profile-file-input').click(); }
 function updateProfilePhoto(e) {
   const file = e.target.files[0];
@@ -576,9 +573,9 @@ function closeModal() {
   document.getElementById('input-content').value = '';
   document.getElementById('photo-preview').style.display = 'none';
   document.getElementById('photo-upload').style.display = '';
-  photoBase64 = ''; selectedPts = 10; selectedTags = [];
+  photoBase64 = ''; selectedPts = 1; selectedTags = [];
   document.querySelectorAll('.pts-btn').forEach(b => b.classList.remove('selected'));
-  document.querySelector('[data-pts="10"]').classList.add('selected');
+  document.querySelector('[data-pts="1"]').classList.add('selected');
   document.querySelectorAll('.tag-btn').forEach(b => b.classList.remove('selected'));
 }
 
@@ -639,7 +636,6 @@ function showToast(msg) {
   setTimeout(() => t.classList.remove('show'), 2800);
 }
 
-// 벚꽃 애니메이션 로직 유지
 (function() {
   const canvas = document.getElementById('sakura');
   const ctx = canvas.getContext('2d');
@@ -680,7 +676,6 @@ function showToast(msg) {
   animate();
 })();
 
-// 수정사항: 페이지 로드 시 사용자 체크
 checkUser();
 </script>
 </body>
