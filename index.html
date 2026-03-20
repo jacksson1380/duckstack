@@ -358,7 +358,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-// 프로젝트 설정 정보 - 수정사항 반영 (Supabase Client 초기화 옵션 추가)
+// 프로젝트 설정 정보
 const SUPABASE_URL = 'https://rrfjdicbtihxqjiaeuus.supabase.co'; 
 const SUPABASE_KEY = 'sb_publishable_dieKyaJ9x78Tbgm41gpmoQ_GZlcVMZ-';
 const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
@@ -389,7 +389,6 @@ let selectedTags = [];
 let currentView = 'list';
 let isFilteredView = false;
 
-// 수정사항: 불필요한 초기화 로직 제거로 로그인 속도 및 안정성 향상
 async function handleGoogleLogin() {
   const { error } = await _supabase.auth.signInWithOAuth({
     provider: 'google',
@@ -401,19 +400,21 @@ async function handleGoogleLogin() {
   if (error) showToast("로그인 실패: " + error.message);
 }
 
-// 수정사항: getSession을 사용하여 더 빠르게 로컬 세션 탐색
+// 수정사항: localStorage를 활용하여 구글 동기화 문제를 우회하고 프로필 사진을 고정함
 async function checkUser() {
   const { data: { session } } = await _supabase.auth.getSession();
   const user = session?.user;
 
   if (user) {
+    // ★ 핵심 수정: localStorage에 저장된 주소를 최우선으로 불러와 동기화 문제 해결
+    const savedPhoto = localStorage.getItem('duckstack_avatar_' + user.id);
+    
     userData = {
       id: user.id,
       name: user.user_metadata.full_name || "사용자",
       email: user.email,
       joinDate: new Date(user.created_at).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' }),
-      // 수정 포인트: 커스텀 저장 사진(avatar_url)을 최우선으로, 없으면 구글 프로필(picture)을 가져옴
-      photo: user.user_metadata.avatar_url || user.user_metadata.picture || "" 
+      photo: savedPhoto || user.user_metadata.avatar_url || user.user_metadata.picture || "" 
     };
     
     document.getElementById('login-screen').classList.add('hidden');
@@ -449,10 +450,13 @@ async function checkUser() {
   }
 }
 
-// 수정사항: 로그아웃 로직 확실하게 수리
+// 수정사항: 로그아웃 시 세션은 지우되, 브라우저가 사진 정보는 기억하도록 함
 async function handleLogout() {
   await _supabase.auth.signOut();
-  localStorage.clear();
+  // ★ localStorage.clear() 대신 세션 관련 정보만 선별적으로 지움 (사진 주소 보존)
+  for (let key in localStorage) {
+    if (key.includes('supabase.auth.token')) localStorage.removeItem(key);
+  }
   location.href = window.location.origin + window.location.pathname;
 }
 
@@ -465,7 +469,7 @@ async function updateProfilePhoto(e) {
   const fileExt = file.name.split('.').pop();
   const fileName = `${userData.id}-${Date.now()}.${fileExt}`;
   
-  // '폴더 방식' 정책에 맞춰 유저 ID를 첫 번째 경로로 추가
+  // '폴더 방식' 보안 정책 유지
   const filePath = `${userData.id}/profiles/${fileName}`;
 
   const { error: uploadError } = await _supabase.storage
@@ -482,6 +486,10 @@ async function updateProfilePhoto(e) {
   const photoUrl = data.publicUrl;
 
   userData.photo = photoUrl;
+  
+  // ★ 핵심 수정: 업로드 성공 시 브라우저에 사진 주소를 영구 박제함
+  localStorage.setItem('duckstack_avatar_' + userData.id, photoUrl);
+
   const imgHtml = `<img src="${photoUrl}">`;
   document.getElementById('header-avatar').innerHTML = imgHtml;
   document.getElementById('mypage-avatar').innerHTML = imgHtml;
@@ -648,7 +656,7 @@ function previewPhoto(e) {
   reader.readAsDataURL(file);
 }
 
-// 수정사항: RLS 권한 위반 해결을 위해 user_id 명시 및 스키마 캐시 대응
+// 수정사항: '폴더 방식' 보안 경로 유지
 async function submitEntry() {
   const title = document.getElementById('input-title').value.trim();
   const content = document.getElementById('input-content').value.trim();
@@ -660,7 +668,7 @@ async function submitEntry() {
     const fileExt = selectedFile.name.split('.').pop();
     const fileName = `${Date.now()}-${Math.random()}.${fileExt}`;
     
-    // '폴더 방식' 정책에 맞춰 유저 ID를 첫 번째 경로로 추가
+    // '폴더 방식' 경로 조립
     const filePath = `${userData.id}/entries/${fileName}`;
 
     const { error: uploadError } = await _supabase.storage
