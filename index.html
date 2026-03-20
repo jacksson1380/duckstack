@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>덕스택 (DuckStack)</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
@@ -306,7 +308,7 @@
         <div class="info-row"><div class="info-label">이름</div><div class="info-val" id="info-name-val"></div></div>
         <div class="info-row"><div class="info-label">연동 이메일</div><div class="info-val" id="info-email-val"></div></div>
         <div class="info-row"><div class="info-label">가입일</div><div class="info-val" id="info-date-val"></div></div>
-        <button onclick="handleLogout()" style="width:100%; padding:14px; border:1px solid #eee; border-radius:14px; background:none; color:#999; font-size:0.85rem; margin-top:10px; cursor:pointer;">로그아웃</button>
+        <button handleLogout()" style="width:100%; padding:14px; border:1px solid #eee; border-radius:14px; background:none; color:#999; font-size:0.85rem; margin-top:10px; cursor:pointer;">로그아웃</button>
       </div>
     </div>
   </div>
@@ -356,14 +358,21 @@
 <div class="toast" id="toast"></div>
 
 <script>
-// 프로젝트 설정 정보
+// 프로젝트 설정 정보 - 수정사항 반영 (Supabase Client 초기화 옵션 추가)
 const SUPABASE_URL = 'https://rrfjdicbtihxqjiaeuus.supabase.co'; 
 const SUPABASE_KEY = 'sb_publishable_dieKyaJ9x78Tbgm41gpmoQ_GZlcVMZ-';
-const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: {
+    storage: window.localStorage, // 저장소 명시
+    autoRefreshToken: true,      // 토큰 자동 갱신
+    persistSession: true,        // 세션 유지 강제
+    detectSessionInUrl: true     // 리다이렉트 후 URL에서 토큰 읽기 활성화
+  }
+});
 
 let entries = [];
 let userData = { name: "", email: "", joinDate: "", photo: "" };
-let selectedFile = null; // 덕행 기록용 선택된 파일 객체
+let selectedFile = null; 
 
 const RANKS = [
   { name: "선행의 씨앗", min: 0 },
@@ -380,7 +389,6 @@ let selectedTags = [];
 let currentView = 'list';
 let isFilteredView = false;
 
-// 구글 로그인 처리
 async function handleGoogleLogin() {
   await _supabase.auth.signOut();
   localStorage.clear();
@@ -395,7 +403,7 @@ async function handleGoogleLogin() {
   if (error) showToast("로그인 실패: " + error.message);
 }
 
-// 유저 상태 체크 및 초기 데이터 로드
+// 유저 데이터 로드 및 UI 설정 로직 유지
 async function checkUser() {
   const { data: { user } } = await _supabase.auth.getUser();
   if (user) {
@@ -433,6 +441,11 @@ async function checkUser() {
     
     updateProfile();
     showView('list');
+  } else {
+    // 세션이 없을 경우 초기 화면 보이기
+    document.getElementById('login-screen').classList.remove('hidden');
+    document.getElementById('app-main').classList.add('hidden');
+    document.getElementById('bottom-nav').classList.add('hidden');
   }
 }
 
@@ -443,7 +456,6 @@ async function handleLogout() {
 
 function triggerProfileUpload() { document.getElementById('profile-file-input').click(); }
 
-// 수정사항: 프로필 사진을 Supabase Storage에 업로드하고 Public URL로 유지
 async function updateProfilePhoto(e) {
   const file = e.target.files[0];
   if (!file) return;
@@ -452,7 +464,6 @@ async function updateProfilePhoto(e) {
   const fileName = `${userData.id}-${Math.random()}.${fileExt}`;
   const filePath = `profiles/${fileName}`;
 
-  // 1. Storage 업로드
   const { error: uploadError } = await _supabase.storage
     .from('images')
     .upload(filePath, file);
@@ -462,11 +473,9 @@ async function updateProfilePhoto(e) {
     return;
   }
 
-  // 2. Public URL 가져오기
   const { data } = _supabase.storage.from('images').getPublicUrl(filePath);
   const photoUrl = data.publicUrl;
 
-  // 3. UI 및 Auth Metadata 업데이트
   userData.photo = photoUrl;
   const imgHtml = `<img src="${photoUrl}">`;
   document.getElementById('header-avatar').innerHTML = imgHtml;
@@ -623,7 +632,7 @@ function toggleTag(btn) {
 function previewPhoto(e) {
   const file = e.target.files[0];
   if (!file) return;
-  selectedFile = file; // Storage 업로드를 위해 파일 객체 저장
+  selectedFile = file; 
   const reader = new FileReader();
   reader.onload = ev => {
     const preview = document.getElementById('photo-preview');
@@ -634,7 +643,6 @@ function previewPhoto(e) {
   reader.readAsDataURL(file);
 }
 
-// 수정사항: 덕행 기록 시 사진을 Storage에 업로드하고 URL을 DB에 저장
 async function submitEntry() {
   const title = document.getElementById('input-title').value.trim();
   const content = document.getElementById('input-content').value.trim();
@@ -663,7 +671,7 @@ async function submitEntry() {
     content,
     point: selectedPts,
     tag: selectedTags[0] || '기타',
-    photo: photoUrl, // Base64 대신 Storage URL 저장
+    photo: photoUrl, 
     created_at: new Date().toISOString()
   };
 
@@ -688,7 +696,6 @@ function showToast(msg) {
   setTimeout(() => t.classList.remove('show'), 2800);
 }
 
-// 벚꽃 애니메이션 로직 유지
 (function() {
   const canvas = document.getElementById('sakura');
   const ctx = canvas.getContext('2d');
@@ -729,7 +736,18 @@ function showToast(msg) {
   animate();
 })();
 
-checkUser();
+// 수정사항 반영: checkUser() 대신 상시 감시 리스너 도입
+_supabase.auth.onAuthStateChange((event, session) => {
+  if (session) {
+    // 세션이 감지되면(로그인 상태라면) 데이터 로드 및 UI 업데이트 실행
+    checkUser();
+  } else {
+    // 세션이 없으면 로그인 화면으로 전환
+    document.getElementById('login-screen').classList.remove('hidden');
+    document.getElementById('app-main').classList.add('hidden');
+    document.getElementById('bottom-nav').classList.add('hidden');
+  }
+});
 </script>
 </body>
 </html>
