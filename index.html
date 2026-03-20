@@ -308,7 +308,7 @@
         <div class="info-row"><div class="info-label">이름</div><div class="info-val" id="info-name-val"></div></div>
         <div class="info-row"><div class="info-label">연동 이메일</div><div class="info-val" id="info-email-val"></div></div>
         <div class="info-row"><div class="info-label">가입일</div><div class="info-val" id="info-date-val"></div></div>
-        <button handleLogout()" style="width:100%; padding:14px; border:1px solid #eee; border-radius:14px; background:none; color:#999; font-size:0.85rem; margin-top:10px; cursor:pointer;">로그아웃</button>
+        <button onclick="handleLogout()" style="width:100%; padding:14px; border:1px solid #eee; border-radius:14px; background:none; color:#999; font-size:0.85rem; margin-top:10px; cursor:pointer;">로그아웃</button>
       </div>
     </div>
   </div>
@@ -363,15 +363,15 @@ const SUPABASE_URL = 'https://rrfjdicbtihxqjiaeuus.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_dieKyaJ9x78Tbgm41gpmoQ_GZlcVMZ-';
 const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: {
-    storage: window.localStorage, // 저장소 명시
-    autoRefreshToken: true,      // 토큰 자동 갱신
-    persistSession: true,        // 세션 유지 강제
-    detectSessionInUrl: true     // 리다이렉트 후 URL에서 토큰 읽기 활성화
+    storage: window.localStorage,
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true
   }
 });
 
 let entries = [];
-let userData = { name: "", email: "", joinDate: "", photo: "" };
+let userData = { id: "", name: "", email: "", joinDate: "", photo: "" };
 let selectedFile = null; 
 
 const RANKS = [
@@ -389,23 +389,23 @@ let selectedTags = [];
 let currentView = 'list';
 let isFilteredView = false;
 
+// 수정사항: 불필요한 초기화 로직 제거로 로그인 속도 및 안정성 향상
 async function handleGoogleLogin() {
-  await _supabase.auth.signOut();
-  localStorage.clear();
-
-  const { data, error } = await _supabase.auth.signInWithOAuth({
+  const { error } = await _supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: window.location.href,
+      redirectTo: window.location.origin + window.location.pathname,
       queryParams: { prompt: 'select_account' }
     }
   });
   if (error) showToast("로그인 실패: " + error.message);
 }
 
-// 유저 데이터 로드 및 UI 설정 로직 유지
+// 수정사항: getSession을 사용하여 더 빠르게 로컬 세션 탐색
 async function checkUser() {
-  const { data: { user } } = await _supabase.auth.getUser();
+  const { data: { session } } = await _supabase.auth.getSession();
+  const user = session?.user;
+
   if (user) {
     userData = {
       id: user.id,
@@ -431,27 +431,28 @@ async function checkUser() {
       document.getElementById('mypage-avatar').innerHTML = imgHtml;
     }
 
-    const { data, error } = await _supabase
+    const { data: entriesData, error: fetchError } = await _supabase
       .from('entries')
       .select('*')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false });
 
-    if (data) entries = data;
+    if (entriesData) entries = entriesData;
     
     updateProfile();
     showView('list');
   } else {
-    // 세션이 없을 경우 초기 화면 보이기
     document.getElementById('login-screen').classList.remove('hidden');
     document.getElementById('app-main').classList.add('hidden');
     document.getElementById('bottom-nav').classList.add('hidden');
   }
 }
 
+// 수정사항: 로그아웃 로직 확실하게 수리
 async function handleLogout() {
   await _supabase.auth.signOut();
-  location.reload();
+  localStorage.clear();
+  location.href = window.location.origin + window.location.pathname;
 }
 
 function triggerProfileUpload() { document.getElementById('profile-file-input').click(); }
@@ -461,7 +462,7 @@ async function updateProfilePhoto(e) {
   if (!file) return;
 
   const fileExt = file.name.split('.').pop();
-  const fileName = `${userData.id}-${Math.random()}.${fileExt}`;
+  const fileName = `${userData.id}-${Date.now()}.${fileExt}`;
   const filePath = `profiles/${fileName}`;
 
   const { error: uploadError } = await _supabase.storage
@@ -469,7 +470,8 @@ async function updateProfilePhoto(e) {
     .upload(filePath, file);
 
   if (uploadError) {
-    showToast('업로드 실패: ' + uploadError.message);
+    showToast('업로드 실패: 권한 또는 설정을 확인해주세요.');
+    console.error(uploadError);
     return;
   }
 
@@ -643,6 +645,7 @@ function previewPhoto(e) {
   reader.readAsDataURL(file);
 }
 
+// 수정사항: RLS 권한 위반 해결을 위해 user_id 명시 및 스키마 캐시 대응
 async function submitEntry() {
   const title = document.getElementById('input-title').value.trim();
   const content = document.getElementById('input-content').value.trim();
@@ -659,7 +662,9 @@ async function submitEntry() {
       .from('images')
       .upload(filePath, selectedFile);
 
-    if (!uploadError) {
+    if (uploadError) {
+      console.error('Storage error:', uploadError);
+    } else {
       const { data } = _supabase.storage.from('images').getPublicUrl(filePath);
       photoUrl = data.publicUrl;
     }
@@ -675,10 +680,12 @@ async function submitEntry() {
     created_at: new Date().toISOString()
   };
 
+  // entries 테이블이 없을 경우 대비하여 콘솔 에러 로그 강화
   const { data, error } = await _supabase.from('entries').insert([entry]).select();
 
   if (error) {
-    showToast('저장 실패: ' + error.message);
+    showToast('저장 실패: 테이블 설정 또는 권한을 확인해주세요.');
+    console.error('DB Insert Error:', error);
   } else {
     entries.unshift(data[0]);
     closeModal();
@@ -736,13 +743,10 @@ function showToast(msg) {
   animate();
 })();
 
-// 수정사항 반영: checkUser() 대신 상시 감시 리스너 도입
 _supabase.auth.onAuthStateChange((event, session) => {
   if (session) {
-    // 세션이 감지되면(로그인 상태라면) 데이터 로드 및 UI 업데이트 실행
     checkUser();
   } else {
-    // 세션이 없으면 로그인 화면으로 전환
     document.getElementById('login-screen').classList.remove('hidden');
     document.getElementById('app-main').classList.add('hidden');
     document.getElementById('bottom-nav').classList.add('hidden');
