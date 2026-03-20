@@ -412,7 +412,8 @@ async function checkUser() {
       name: user.user_metadata.full_name || "사용자",
       email: user.email,
       joinDate: new Date(user.created_at).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' }),
-      photo: user.user_metadata.avatar_url || "" 
+      // 수정 포인트: 커스텀 저장 사진(avatar_url)을 최우선으로, 없으면 구글 프로필(picture)을 가져옴
+      photo: user.user_metadata.avatar_url || user.user_metadata.picture || "" 
     };
     
     document.getElementById('login-screen').classList.add('hidden');
@@ -464,7 +465,7 @@ async function updateProfilePhoto(e) {
   const fileExt = file.name.split('.').pop();
   const fileName = `${userData.id}-${Date.now()}.${fileExt}`;
   
-  // ★ 수정 포인트: '폴더 방식' 정책에 맞춰 유저 ID를 첫 번째 경로로 추가
+  // '폴더 방식' 정책에 맞춰 유저 ID를 첫 번째 경로로 추가
   const filePath = `${userData.id}/profiles/${fileName}`;
 
   const { error: uploadError } = await _supabase.storage
@@ -659,7 +660,7 @@ async function submitEntry() {
     const fileExt = selectedFile.name.split('.').pop();
     const fileName = `${Date.now()}-${Math.random()}.${fileExt}`;
     
-    // ★ 수정 포인트: '폴더 방식' 정책에 맞춰 유저 ID를 첫 번째 경로로 추가
+    // '폴더 방식' 정책에 맞춰 유저 ID를 첫 번째 경로로 추가
     const filePath = `${userData.id}/entries/${fileName}`;
 
     const { error: uploadError } = await _supabase.storage
@@ -684,7 +685,6 @@ async function submitEntry() {
     created_at: new Date().toISOString()
   };
 
-  // entries 테이블이 없을 경우 대비하여 콘솔 에러 로그 강화
   const { data, error } = await _supabase.from('entries').insert([entry]).select();
 
   if (error) {
