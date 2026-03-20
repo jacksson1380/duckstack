@@ -356,13 +356,14 @@
 <div class="toast" id="toast"></div>
 
 <script>
-// 수정사항: Supabase 프로젝트 정보 설정 (변수 이름을 _supabase로 변경하여 충돌 방지)
+// 프로젝트 설정 정보
 const SUPABASE_URL = 'https://rrfjdicbtihxqjiaeuus.supabase.co'; 
 const SUPABASE_KEY = 'sb_publishable_dieKyaJ9x78Tbgm41gpmoQ_GZlcVMZ-';
 const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let entries = [];
 let userData = { name: "", email: "", joinDate: "", photo: "" };
+let selectedFile = null; // 덕행 기록용 선택된 파일 객체
 
 const RANKS = [
   { name: "선행의 씨앗", min: 0 },
@@ -376,11 +377,10 @@ const RANKS = [
 let curDate = new Date();
 let selectedPts = 1;
 let selectedTags = [];
-let photoBase64 = "";
 let currentView = 'list';
 let isFilteredView = false;
 
-// 수정사항: 보강된 구글 로그인 연동 (찌꺼기 세션 정리 및 계정 선택 강제)
+// 구글 로그인 처리
 async function handleGoogleLogin() {
   await _supabase.auth.signOut();
   localStorage.clear();
@@ -388,26 +388,23 @@ async function handleGoogleLogin() {
   const { data, error } = await _supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: window.location.origin + window.location.pathname,
-      queryParams: {
-        prompt: 'select_account'
-      }
+      redirectTo: window.location.href,
+      queryParams: { prompt: 'select_account' }
     }
   });
-  if (error) {
-    showToast("로그인 실패: " + error.message);
-    window.history.replaceState({}, document.title, window.location.pathname);
-  }
+  if (error) showToast("로그인 실패: " + error.message);
 }
 
+// 유저 상태 체크 및 초기 데이터 로드
 async function checkUser() {
   const { data: { user } } = await _supabase.auth.getUser();
   if (user) {
     userData = {
+      id: user.id,
       name: user.user_metadata.full_name || "사용자",
       email: user.email,
       joinDate: new Date(user.created_at).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' }),
-      photo: user.user_metadata.avatar_url || ""
+      photo: user.user_metadata.avatar_url || "" 
     };
     
     document.getElementById('login-screen').classList.add('hidden');
@@ -419,11 +416,20 @@ async function checkUser() {
     document.getElementById('info-name-val').textContent = userData.name;
     document.getElementById('info-email-val').textContent = userData.email;
     document.getElementById('info-date-val').textContent = userData.joinDate;
+    
     if (userData.photo) {
       const imgHtml = `<img src="${userData.photo}">`;
       document.getElementById('header-avatar').innerHTML = imgHtml;
       document.getElementById('mypage-avatar').innerHTML = imgHtml;
     }
+
+    const { data, error } = await _supabase
+      .from('entries')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+
+    if (data) entries = data;
     
     updateProfile();
     showView('list');
@@ -436,18 +442,41 @@ async function handleLogout() {
 }
 
 function triggerProfileUpload() { document.getElementById('profile-file-input').click(); }
-function updateProfilePhoto(e) {
+
+// 수정사항: 프로필 사진을 Supabase Storage에 업로드하고 Public URL로 유지
+async function updateProfilePhoto(e) {
   const file = e.target.files[0];
   if (!file) return;
-  const reader = new FileReader();
-  reader.onload = ev => {
-    userData.photo = ev.target.result;
-    const imgHtml = `<img src="${userData.photo}">`;
-    document.getElementById('header-avatar').innerHTML = imgHtml;
-    document.getElementById('mypage-avatar').innerHTML = imgHtml;
-    showToast('프로필 사진이 변경되었습니다 🌸');
-  };
-  reader.readAsDataURL(file);
+
+  const fileExt = file.name.split('.').pop();
+  const fileName = `${userData.id}-${Math.random()}.${fileExt}`;
+  const filePath = `profiles/${fileName}`;
+
+  // 1. Storage 업로드
+  const { error: uploadError } = await _supabase.storage
+    .from('images')
+    .upload(filePath, file);
+
+  if (uploadError) {
+    showToast('업로드 실패: ' + uploadError.message);
+    return;
+  }
+
+  // 2. Public URL 가져오기
+  const { data } = _supabase.storage.from('images').getPublicUrl(filePath);
+  const photoUrl = data.publicUrl;
+
+  // 3. UI 및 Auth Metadata 업데이트
+  userData.photo = photoUrl;
+  const imgHtml = `<img src="${photoUrl}">`;
+  document.getElementById('header-avatar').innerHTML = imgHtml;
+  document.getElementById('mypage-avatar').innerHTML = imgHtml;
+
+  await _supabase.auth.updateUser({
+    data: { avatar_url: photoUrl }
+  });
+
+  showToast('프로필 사진이 안전하게 저장되었습니다 🌸');
 }
 
 function getRankInfo(pts) {
@@ -456,8 +485,8 @@ function getRankInfo(pts) {
   const idx = RANKS.indexOf(rank);
   const next = RANKS[idx + 1];
   let progress = 0;
-  if (!next) { progress = 100; }
-  else { progress = Math.min(100, Math.round(((pts - rank.min) / (next.min - rank.min)) * 100)); }
+  if (!next) progress = 100;
+  else progress = Math.min(100, Math.round(((pts - rank.min) / (next.min - rank.min)) * 100));
   return { ...rank, next, progress, idx };
 }
 
@@ -573,7 +602,7 @@ function closeModal() {
   document.getElementById('input-content').value = '';
   document.getElementById('photo-preview').style.display = 'none';
   document.getElementById('photo-upload').style.display = '';
-  photoBase64 = ''; selectedPts = 1; selectedTags = [];
+  selectedFile = null; selectedPts = 1; selectedTags = [];
   document.querySelectorAll('.pts-btn').forEach(b => b.classList.remove('selected'));
   document.querySelector('[data-pts="1"]').classList.add('selected');
   document.querySelectorAll('.tag-btn').forEach(b => b.classList.remove('selected'));
@@ -594,39 +623,62 @@ function toggleTag(btn) {
 function previewPhoto(e) {
   const file = e.target.files[0];
   if (!file) return;
+  selectedFile = file; // Storage 업로드를 위해 파일 객체 저장
   const reader = new FileReader();
   reader.onload = ev => {
-    photoBase64 = ev.target.result;
     const preview = document.getElementById('photo-preview');
-    preview.src = photoBase64;
+    preview.src = ev.target.result;
     preview.style.display = 'block';
     document.getElementById('photo-upload').style.display = 'none';
   };
   reader.readAsDataURL(file);
 }
 
-function submitEntry() {
+// 수정사항: 덕행 기록 시 사진을 Storage에 업로드하고 URL을 DB에 저장
+async function submitEntry() {
   const title = document.getElementById('input-title').value.trim();
   const content = document.getElementById('input-content').value.trim();
   if (!title) { showToast('제목을 입력해주세요 🌸'); return; }
   if (!content) { showToast('내용을 입력해주세요 🌱'); return; }
 
-  const now = new Date(); 
+  let photoUrl = "";
+  if (selectedFile) {
+    const fileExt = selectedFile.name.split('.').pop();
+    const fileName = `${Date.now()}-${Math.random()}.${fileExt}`;
+    const filePath = `entries/${fileName}`;
+
+    const { error: uploadError } = await _supabase.storage
+      .from('images')
+      .upload(filePath, selectedFile);
+
+    if (!uploadError) {
+      const { data } = _supabase.storage.from('images').getPublicUrl(filePath);
+      photoUrl = data.publicUrl;
+    }
+  }
+
   const entry = {
-    id: Date.now(),
+    user_id: userData.id,
     title,
     content,
     point: selectedPts,
     tag: selectedTags[0] || '기타',
-    photo: photoBase64,
-    created_at: now.toString(),
+    photo: photoUrl, // Base64 대신 Storage URL 저장
+    created_at: new Date().toISOString()
   };
-  entries.unshift(entry);
-  closeModal();
-  updateProfile();
-  isFilteredView = false;
-  showView('list');
-  showToast(`+${selectedPts} PTS 덕행이 기록되었어요! 🌸`);
+
+  const { data, error } = await _supabase.from('entries').insert([entry]).select();
+
+  if (error) {
+    showToast('저장 실패: ' + error.message);
+  } else {
+    entries.unshift(data[0]);
+    closeModal();
+    updateProfile();
+    isFilteredView = false;
+    showView('list');
+    showToast(`+${selectedPts} PTS 덕행이 안전하게 저장되었습니다! 🌸`);
+  }
 }
 
 function showToast(msg) {
@@ -636,6 +688,7 @@ function showToast(msg) {
   setTimeout(() => t.classList.remove('show'), 2800);
 }
 
+// 벚꽃 애니메이션 로직 유지
 (function() {
   const canvas = document.getElementById('sakura');
   const ctx = canvas.getContext('2d');
