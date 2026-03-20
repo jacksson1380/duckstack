@@ -463,7 +463,9 @@ async function updateProfilePhoto(e) {
 
   const fileExt = file.name.split('.').pop();
   const fileName = `${userData.id}-${Date.now()}.${fileExt}`;
-  const filePath = `profiles/${fileName}`;
+  
+  // ★ 수정 포인트: '폴더 방식' 정책에 맞춰 유저 ID를 첫 번째 경로로 추가
+  const filePath = `${userData.id}/profiles/${fileName}`;
 
   const { error: uploadError } = await _supabase.storage
     .from('images')
@@ -656,7 +658,9 @@ async function submitEntry() {
   if (selectedFile) {
     const fileExt = selectedFile.name.split('.').pop();
     const fileName = `${Date.now()}-${Math.random()}.${fileExt}`;
-    const filePath = `entries/${fileName}`;
+    
+    // ★ 수정 포인트: '폴더 방식' 정책에 맞춰 유저 ID를 첫 번째 경로로 추가
+    const filePath = `${userData.id}/entries/${fileName}`;
 
     const { error: uploadError } = await _supabase.storage
       .from('images')
